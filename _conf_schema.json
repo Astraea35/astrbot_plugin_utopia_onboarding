@@ -1,0 +1,42 @@
+{
+  "group_ids": {
+    "description": "启用新人引导的QQ群号",
+    "type": "list",
+    "default": ["1080530485"]
+  },
+  "ai_detection_enabled": {
+    "description": "扩展AI求助检测（本地词库未命中时）",
+    "type": "bool",
+    "default": true
+  },
+  "intent_provider_id": {
+    "description": "求助检测模型（留空＝跟随AstrBot当前会话）",
+    "type": "string",
+    "default": "",
+    "hint": "检测只使用简短文本，支持为其单独选择较便宜的模型。",
+    "_special": "select_provider"
+  },
+  "intent_fallback_provider_ids": {
+    "description": "求助检测备用模型（按顺序降级）",
+    "type": "list",
+    "items": {"type": "string"},
+    "default": [],
+    "hint": "留空继承AstrBot当前会话的回退对话模型；包括主模型在内最多尝试3个。",
+    "_special": "select_providers"
+  },
+  "chat_provider_id": {
+    "description": "答疑模型（留空＝跟随AstrBot当前会话）",
+    "type": "string",
+    "default": "",
+    "hint": "支持识图的模型可处理求助中的报错截图。",
+    "_special": "select_provider"
+  },
+  "chat_fallback_provider_ids": {
+    "description": "答疑备用模型（按顺序降级）",
+    "type": "list",
+    "items": {"type": "string"},
+    "default": [],
+    "hint": "留空继承AstrBot当前会话的回退对话模型；截图只交给支持图片的模型。",
+    "_special": "select_providers"
+  }
+}

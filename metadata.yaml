@@ -1,0 +1,7 @@
+name: astrbot_plugin_utopia_onboarding
+display_name: 乌托邦新人进服引导
+desc: 官网知识库新人答疑，区分求助者与帮忙者，支持先图后问、进度记忆、暂停与模型降级。
+version: v1.3.1
+author: Utopia
+repo: https://github.com/Astraea35/astrbot_plugin_utopia_onboarding
+astrbot_version: ">=4.5.7"
