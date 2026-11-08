@@ -30,6 +30,7 @@ from .intent_detection import (
     parse_intent_result,
 )
 from .model_fallback import ImageProviderUnavailable, generate_with_fallback
+from .easybot_monitor import EasyBotMonitor
 from .site_knowledge import BASE_URL, KB_NAME, SOURCE_PAGES, build_documents
 
 INTENT_BATCH_DELAY = 3
@@ -57,6 +58,7 @@ SYSTEM_PROMPT = """你是梦幻丨乌托邦探险之旅的新人引导助手，�
 """
 
 DECISION_PROMPT = """
+玩家刚绑定后正在排查进服失败时，“mod里有这个”“84个实体无法识别”“有什么扩展吗”是同一人的连续故障描述，必须结合他之前的截图回答。注册表同步失败、unknown to this client、无法识别实体说明已到连接校验阶段，不要退回启动器安装教程；截图显示的模组名与错误是证据，不能断言某个模组配置就是原因。已用群文件整合包仍缺项时也可能是包本身有问题，应保留截图交管理组核查。
 本轮同时判断是否值得回复并生成答案，只输出JSON：
 {"should_reply":true,"confidence":0.99,"image_is_help":false,"answer":"简短答案与官网链接","phrases":["原话中的具体进服表达"]}
 只有当前玩家正在请求服务器帮助且置信度至少0.9时才回复；本地关键词命中只说明是候选，不能代替判断。非求助返回should_reply=false、answer=""、phrases=[]。
@@ -88,7 +90,7 @@ QUESTION = re.compile(
     r"怎么|如何|咋|怎样|能不能|可以|求|请问|哪里|哪儿|哪个|多少|什么|为啥|为什么|有没有|有无|吗|么|[?？]|不支持|失败|不了|不行|闪退|黑屏|卡住|卡在|报错|过期|忘记|未绑定|下载"
 )
 ISSUE = re.compile(
-    r"进不去|进不来|连不上|无法连接|连接失败|模组不匹配|mod.?不匹配|未绑定|验证码.*过期|忘.*密码|启动不了|启动失败|启动器闪退|游戏闪退|缺少模组|(?:解压|下载|安装).{0,8}(?:错误|失败|不了|损坏)|(?:crc|校验).{0,8}(?:错|失败)|战利品表.{0,120}(?:为空|空了|无法读取)|战利品无法生成",
+    r"进不去|进不来|连不上|无法连接|连接失败|模组不匹配|mod.?不匹配|未绑定|验证码.*过期|忘.*密码|启动不了|启动失败|启动器闪退|游戏闪退|缺少模组|注册表.{0,12}(?:失败|不匹配)|(?:实体|注册项|条目).{0,12}(?:无法识别|不识别|缺失)|unknown to this client|registry.?sync.{0,20}(?:fail|error)|(?:解压|下载|安装).{0,8}(?:错误|失败|不了|损坏)|(?:crc|校验).{0,8}(?:错|失败)|战利品表.{0,120}(?:为空|空了|无法读取)|战利品无法生成",
     re.I,
 )
 NEW_PLAYER = re.compile(
@@ -232,6 +234,8 @@ class UtopiaOnboarding(Star):
 
     async def initialize(self):
         self.sync_task = asyncio.create_task(self._sync_loop())
+        self.easybot_monitor = EasyBotMonitor(self)
+        self.easybot_task = asyncio.create_task(self.easybot_monitor.run())
 
     def _save_manifest(self, manifest: dict) -> None:
         temporary = self.manifest_path.with_suffix(".tmp")
@@ -648,6 +652,18 @@ class UtopiaOnboarding(Star):
         admin = bool(getattr(event, "is_admin", lambda: False)()) or raw.get(
             "sender", {}
         ).get("role") in {"admin", "owner"}
+        monitor = getattr(self, "easybot_monitor", None)
+        if images and previous is None and monitor is not None:
+            try:
+                newcomer = await asyncio.to_thread(monitor.binding, qq=sender)
+            except Exception as error:
+                logger.warning("Utopia newcomer lookup failed: error=%s", type(error).__name__)
+                newcomer = None
+            if newcomer:
+                previous = self.sessions[key] = {
+                    "at": now, "last_help_at": now, "image_followup_open": True,
+                    "facts": {}, "history": [], "recent_binding": True,
+                }
         if admin and TAKEOVER.search(safe_text):
             targets = {str(item.qq) for item in components if isinstance(item, At)}
             if quoted and str(quoted.sender_id) not in ("", "0", "None"):
@@ -736,6 +752,11 @@ class UtopiaOnboarding(Star):
             HELPER_ADVICE.search(safe_text)
             and not re.search(r"帮我|教我|我该|我怎么", safe_text)
         ):
+            # Retain this player's evidence even when the reply is addressed to a human.
+            if to_other and (images or is_help_question(safe_text)):
+                recent.append({"sender": sender, "text": safe_text, "at": now,
+                               "epoch": revision, "images": images, "connection": False,
+                               "event_token": event._utopia_token})
             logger.info(
                 "Utopia onboarding skipped: group=%s sender=%s message_id=%s reason=%s",
                 group,
@@ -794,6 +815,7 @@ class UtopiaOnboarding(Star):
                 [item["text"] for item in own[-8:]] + [safe_text],
             ),
             "sender_is_admin": admin,
+            "recent_binding": (previous or {}).get("recent_binding", False),
         }
         connection = bool(CONNECTION.search(safe_text)) and not THIRD_PARTY.search(
             safe_text
@@ -866,6 +888,7 @@ class UtopiaOnboarding(Star):
             )
         )
         conversation["has_images"] = image_candidate
+        direct_help = direct_help or bool(image_candidate and TOPIC.search(safe_text))
         visual_question = bool(
             image_candidate
             and VAGUE_IMAGE_QUESTION.search(safe_text)
@@ -1065,8 +1088,10 @@ class UtopiaOnboarding(Star):
                         unknown_install_device = not re.search(
                             r"电脑|安卓|手机|windows|\bpc\b|pcl|fcl", own_text, re.I
                         )
-                        if unknown_install_device:
+                        if unknown_install_device and not image_urls:
                             request_system += "\n若决定回复：当前玩家尚未说明设备，只问电脑还是安卓手机，可附官网入口，不展开任何设备的安装、解压或启动步骤。其他玩家的设备不能作为依据。"
+                        elif unknown_install_device:
+                            request_system += "\n先读取本人的截图确认实际故障阶段。若图中是进服断开、注册表同步或模组缺项，应直接解释可见错误并继续核查，不能因为文字提到解压就退回设备问答。只有确需给出设备专属安装操作、且截图与本人文字均不能确定设备时才问电脑还是安卓。"
                     stage = conversation["facts"].get("stage")
                     if stage == "website":
                         request_system += "\n本轮只处理官网网页访问失败；不要询问玩家是否指服务器，也不要展开安装、服务器地址、注册或绑定。"
@@ -1138,6 +1163,7 @@ class UtopiaOnboarding(Star):
                         conversation["facts"].get("stage")
                         in {"download", "extract", "launch"}
                         and not conversation["facts"].get("device")
+                        and not image_urls
                         and re.search(
                             r"不要解压|解压后|(?:先|直接|再|双击).{0,8}(?:解压|安装|导入)|pcl|fcl|apk|\.exe",
                             answer,
@@ -1273,6 +1299,10 @@ class UtopiaOnboarding(Star):
 
     async def terminate(self):
         self.stopping = True
+        monitor_task = getattr(self, "easybot_task", None)
+        if monitor_task:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
         tasks = list(self.intent_tasks.values())
         for task in tasks:
             task.cancel()

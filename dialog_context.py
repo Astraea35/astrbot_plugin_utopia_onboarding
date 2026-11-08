@@ -45,7 +45,9 @@ def update_facts(previous: dict, messages: list[str]) -> dict:
             r"不是手机|非安卓", text
         ):
             facts["device"] = "安卓手机" if "苹果" not in text else "苹果设备"
-        if re.search(r"官网|网站|网页", text):
+        if re.search(r"注册表|实体.*无法识别|unknown to this client|registry.?sync", text, re.I):
+            facts["stage"] = "connection"
+        elif re.search(r"官网|网站|网页", text):
             facts["stage"] = "website"
         elif re.search(r"数据|存档|领地|新号", text):
             facts["stage"] = "account_data"
@@ -56,13 +58,15 @@ def update_facts(previous: dict, messages: list[str]) -> dict:
         elif re.search(r"地址|线路", text) or ADDRESS_QUESTION.search(text):
             facts["stage"] = "address"
         elif re.search(r"解压|crc|压缩包|损坏", text, re.I):
-            facts["stage"] = "extract"
+            if facts["stage"] != "connection":
+                facts["stage"] = "extract"
         elif re.search(
             r"下载|整合包|群文件|模组怎么装|本服的包|包从哪|包在哪|包咋|这个包|mod",
             text,
             re.I,
         ):
-            facts["stage"] = "download"
+            if facts["stage"] != "connection":
+                facts["stage"] = "download"
         elif re.search(r"启动|闪退|黑屏|加载", text):
             facts["stage"] = "launch"
         elif re.search(r"进不去|进不来|连不上|连接|卡吗|卡不卡|玩不了", text):
