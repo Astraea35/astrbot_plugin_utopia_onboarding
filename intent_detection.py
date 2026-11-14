@@ -5,7 +5,18 @@ import math
 import re
 import unicodedata
 
-INTENT_PROMPT = """你负责识别Minecraft服务器QQ群中的新人求助，不负责回答问题。
+from .dialog_context import is_outside_onboarding
+
+SCOPE_PROMPT = """职责仅限玩家本人下载、安装、启动、进服、线路、绑定、登录、账号数据及官网FAQ明确收录的故障。
+模组开发、文件格式转换、移植适配、服务端功能定制、商店设计、服务器地址卡/宣传图制作、光影或材质的月亮/天空/颜色等外观讨论不属于新人求助，即使提到“服务器”“版本”“mod”“问题”或使用问句也不回复。
+维护者讨论打包更新、发布整合包、招募别人代传文件，也不是本人需要下载或安装；“有没有志愿者帮我发个新的懒人包”“等我把mod发群里”不回复。
+例如“对了，我给你的些文件能不能转换成在吗服务器版本的”“这我用的光影问题吗，为啥月亮是这”“就一张正经的服务器地址卡啊，那你到底要什么样的图？”均为非求助。若明确说装光影后游戏启动闪退或进不去，则仍按实际启动/连接故障判断。
+只有先确认在上述职责内，才查询官网是否有答案；官网没写不能成为插话、要求交管理组、禁止改文件或附无关版本/教程的理由。不能从别人正在聊天或自己以前的回复推导出当前玩家需要帮助。
+"""
+
+INTENT_PROMPT = (
+    SCOPE_PROMPT
+    + """你负责识别Minecraft服务器QQ群中的新人求助，不负责回答问题。
 判断每条消息是否正在请求帮助：获得整合包、下载/安装/启动客户端、加入服务器、连接报错、设备兼容、验证码绑定、注册登录或账号密码。
 官网FAQ中的战利品箱故障也属于服务器求助，包括Lootr提示“战利品表为空”“战利品无法生成”或ati_structures表名报错。玩家直接贴出自己遇到的完整箱子报错也可视为求助，不要求带问号；开箱收获、寻宝/刷箱攻略和管理组转述排查结论仍不回复。
 这是服务器QQ群，玩家可省略“Minecraft”“服务器”等主语，也可能用口语、错字或“端子”“包”等叫法。
@@ -27,6 +38,7 @@ context.facts保留同一玩家已经说明的设备和卡住步骤。"服务器
 对肯定的求助，从该条原文逐字提取最多3个有辨识度的表达，每个4到32字，优先4到12字的稳定短语，可用于下次直接匹配；不要总是照抄整句。例如“想来服里耍耍，需要先弄点啥”可以提取“想来服里耍耍”。
 短语必须保留进服领域或具体故障的含义，不能只提取“怎么”“不行”“帮帮忙”“找不到”“这个”“问题”等泛词；不能包含验证码、密码、QQ号、网址或其他个人信息。
 非求助的phrases必须为空数组。"""
+)
 
 PHRASE_DOMAIN = re.compile(
     r"进服|入服|服里|本服|整合|整包|客户端|启动|端子|验证|绑定|注册|登录|登陆|账号|帐号|密码|安卓|苹果|手机|内存|显卡|安装|下载|解压|闪退|黑屏|报错|联机|加载|版本|白名单|群文件|加群|入群|群号|官网|pcl|fcl|java|fabric|mod|这个包|游戏包|包从哪|包在哪|包咋|战利品表|战利品箱|lootr|ati_structures",
@@ -106,7 +118,11 @@ def parse_intent_result(
             continue
         if not 0 <= confidence <= 1 or type(item.get("is_help")) is not bool:
             continue
-        accepted = item["is_help"] and confidence >= 0.9
+        accepted = (
+            item["is_help"]
+            and confidence >= 0.9
+            and not is_outside_onboarding(messages[index])
+        )
         phrases = []
         suggestions = item.get("phrases", [])
         if accepted and confidence >= 0.97 and isinstance(suggestions, list):

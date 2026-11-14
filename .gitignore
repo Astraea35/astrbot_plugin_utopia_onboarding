@@ -6,3 +6,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
+data/
+logs/
+backups/
+*.log
+*.db
+*.db-*
+*.sqlite*
+*_config.json

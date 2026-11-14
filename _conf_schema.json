@@ -2,12 +2,13 @@
   "easybot_dir": {
     "description": "EasyBot 本机安装目录（只读进退服日志和原生绑定数据）",
     "type": "string",
-    "default": "C:\\ruanjian\\乌托邦3.5.2服务端\\easybot-dev-win-x64-2.0.0-dev.25"
+    "default": "",
+    "hint": "填写实际安装目录；留空时关闭绑定查询和秒退监听。"
   },
   "group_ids": {
     "description": "启用新人引导的QQ群号",
     "type": "list",
-    "default": ["1080530485"]
+    "default": []
   },
   "ai_detection_enabled": {
     "description": "扩展AI求助检测（本地词库未命中时）",

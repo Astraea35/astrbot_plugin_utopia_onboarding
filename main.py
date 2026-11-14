@@ -20,11 +20,13 @@ from .dialog_context import (
     HELPER_ADVICE,
     RESUME_HELP,
     VAGUE_IMAGE_QUESTION,
+    is_outside_onboarding,
     stage_fallback,
     update_facts,
 )
 from .intent_detection import (
     INTENT_PROMPT,
+    SCOPE_PROMPT,
     normalize_text,
     parse_answer_result,
     parse_intent_result,
@@ -40,13 +42,13 @@ MESSAGE_SETTLE_DELAY = 0.8
 PAUSE_SECONDS = 300
 ACCOUNT_REPLY = "这涉及账号身份与旧数据，需要管理组核查。请整理旧游戏ID、新游戏ID、原来和现在的登录方式（正版或离线）及发生时间交给管理组。先别反复改名或重新注册，暂时不能判断旧存档、背包或领地是否已迁移。密码不要发群里。官网登录说明：https://mhwtb.shop/guide-start.html"
 
-SYSTEM_PROMPT = """你是梦幻丨乌托邦探险之旅的新人引导助手，面向已经在QQ群提问的新玩家。
-提问者已经在官方QQ群1080530485，不要再要求他加入当前群；可以直接引导他打开群文件或发送自己的绑定验证码。只有明确询问群号或邀请别人入群时，才介绍加群方法。
+SYSTEM_PROMPT = SCOPE_PROMPT + """你是梦幻丨乌托邦探险之旅的新人引导助手，面向已经在QQ群提问的新玩家。
+提问者已经在配置启用的官方QQ群，不要再要求他加入当前群；可以直接引导他打开群文件或发送自己的绑定验证码。只有明确询问群号或邀请别人入群时，才介绍加群方法。
 用简洁自然的中文回答，按对方当前卡住的步骤给出下一步；必要时只追问一个关键问题。
 安装或启动问题若未说明设备，先问电脑还是安卓手机，可先提供下载入口；不能把两种设备的操作混用，也不能在设备未确定时笼统要求“解压”或“不要解压”。
 服务器事实优先且严格以提供的 mhwtb.shop 官网原文为准。官网资料覆盖下载、版本、进群、进服、安卓、绑定、注册、登录和FAQ故障说明。同一事项以快速开始的详细教程优先于首页简短介绍。
 战利品箱、Lootr或“战利品表为空/无法生成”按官网FAQ解释报错与反馈步骤；已有对应说明时直接答复，不追问设备、安装或登录阶段，不声称已经修复箱子或恢复战利品。可能原因保留不确定措辞，具体处理交管理组核查。
-不要用模型常识、历史群聊或其他服务器的做法覆盖官网。资料没写的事项明确说明并让玩家提供完整报错或联系管理组；不要猜测Java版本、白名单流程、线路在线情况或玩家是否已绑定。
+不要用模型常识、历史群聊或其他服务器的做法覆盖官网。职责内的求助若资料没写，明确说明并只追问相关报错；只有确需管理权限核查的事项才转管理组。职责外保持静默，不自行制定“禁止改文件/整合包/服务端”等规则；不要猜测Java版本、白名单流程、线路在线情况或玩家是否已绑定。
 群文件夹、文件名、备份教程、备用域名只能使用官网原文实际记载的名称。官网打不开时可以建议换浏览器或网络、索取浏览器错误；不得虚构“官网教程/下载”备份文件夹或备用教程。
 官网链接和服务器地址只能逐字使用资料中出现的值；回答末尾给出最相关的一条官网教程链接，最多给两条。
 当检索原文没有涉及问题时，可以附官网总教程 https://mhwtb.shop/guide-start.html，但不要把无关页面当成答案来源。
@@ -173,7 +175,7 @@ def is_help_question(text: str, active: bool = False, has_image: bool = False) -
     text = text.strip()
     if text.startswith(("/", "！", "!")) or BIND_CODE.fullmatch(text):
         return False
-    if is_resolved(text):
+    if is_resolved(text) or is_outside_onboarding(text):
         return False
     if ISSUE.search(text) or NEW_PLAYER.search(text):
         return True
@@ -517,7 +519,7 @@ class UtopiaOnboarding(Star):
             self.stopping
             or event.get_platform_name() != "aiocqhttp"
             or group
-            not in {str(x) for x in self.config.get("group_ids", ["1080530485"])}
+            not in {str(x) for x in self.config.get("group_ids", [])}
             or str(event.get_sender_id()) == str(event.get_self_id())
         ):
             return
@@ -592,7 +594,7 @@ class UtopiaOnboarding(Star):
         raw = getattr(event.message_obj, "raw_message", None)
         raw = raw if isinstance(raw, dict) else {}
         group = str(event.get_group_id() or raw.get("group_id") or "")
-        if group not in {str(x) for x in self.config.get("group_ids", ["1080530485"])}:
+        if group not in {str(x) for x in self.config.get("group_ids", [])}:
             return
         if raw.get("post_type") not in (None, "message") or not group:
             return
@@ -773,6 +775,14 @@ class UtopiaOnboarding(Star):
                 group,
                 sender,
                 message_id,
+            )
+            return
+        if is_outside_onboarding(safe_text):
+            if previous:
+                previous["image_followup_open"] = False
+            logger.info(
+                "Utopia onboarding skipped: group=%s sender=%s message_id=%s reason=outside_onboarding_scope",
+                group, sender, message_id,
             )
             return
         own = [
@@ -1244,8 +1254,20 @@ class UtopiaOnboarding(Star):
                 bool(safe_text)
                 and is_help_question(safe_text, active=active, has_image=bool(images))
                 and not THIRD_PARTY.search(safe_text)
+                and (
+                    ISSUE.search(safe_text)
+                    or NEW_PLAYER.search(safe_text)
+                    or conversation["facts"].get("stage") in {
+                        "website", "address", "download", "extract", "launch",
+                        "login", "binding", "account_data", "connection",
+                    }
+                )
             )
             if not safe_help or visual_question:
+                logger.info(
+                    "Utopia onboarding skipped: group=%s sender=%s message_id=%s reason=unconfirmed_help_after_failure",
+                    group, sender, message_id,
+                )
                 return
             if account_data:
                 answer = ACCOUNT_REPLY

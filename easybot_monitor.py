@@ -13,7 +13,6 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Plain
 
-EASYBOT_DIR = r"C:\ruanjian\乌托邦3.5.2服务端\easybot-dev-win-x64-2.0.0-dev.25"
 PRESENCE = re.compile(
     r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+) \+08:00 \[INF\] "
     r"\[(加入|退出)\]\[乌托邦探险之旅\] ([A-Za-z0-9_]{1,16})\s*$"
@@ -29,7 +28,8 @@ PACK_REMINDER = (
 class EasyBotMonitor:
     def __init__(self, plugin):
         self.plugin = plugin
-        self.root = Path(plugin.config.get("easybot_dir") or EASYBOT_DIR)
+        directory = plugin.config.get("easybot_dir", "").strip()
+        self.root = Path(directory) if directory else None
         self.joins = {}
         self.state_path = plugin.data_dir / "quick_exit_reminders.json"
         try:
@@ -40,9 +40,15 @@ class EasyBotMonitor:
             self.sent = {}
 
     def binding(self, *, player=None, qq=None, at=None):
+        if self.root is None:
+            return None
         at = time.time() if at is None else at
-        clause, value = ("p.Name = ? COLLATE NOCASE", player) if player else ("s.Uuid = ?", qq)
-        with sqlite3.connect((self.root / "EasyBot.db").as_uri() + "?mode=ro", uri=True, timeout=1) as db:
+        clause, value = (
+            ("p.Name = ? COLLATE NOCASE", player) if player else ("s.Uuid = ?", qq)
+        )
+        with sqlite3.connect(
+            (self.root / "EasyBot.db").as_uri() + "?mode=ro", uri=True, timeout=1
+        ) as db:
             rows = db.execute(
                 "SELECT p.Name, s.Uuid, p.CreatedTime FROM Player p "
                 "JOIN PlayerSocialAccount ps ON ps.UsersId=p.Id "
@@ -52,7 +58,10 @@ class EasyBotMonitor:
             ).fetchall()
         candidates = []
         for name, user, created in rows:
-            if re.fullmatch(r"[1-9]\d{4,11}", str(user)) and 0 <= at - datetime.fromisoformat(created).timestamp() <= 86400:
+            if (
+                re.fullmatch(r"[1-9]\d{4,11}", str(user))
+                and 0 <= at - datetime.fromisoformat(created).timestamp() <= 86400
+            ):
                 candidates.append((str(name), str(user)))
         return candidates[0] if len({user for _, user in candidates}) == 1 else None
 
@@ -64,7 +73,9 @@ class EasyBotMonitor:
         at = datetime.fromisoformat(when).timestamp()
         if not 0 <= time.time() - at <= 60:
             return
-        self.joins = {key: value for key, value in self.joins.items() if at - value <= 30}
+        self.joins = {
+            key: value for key, value in self.joins.items() if at - value <= 30
+        }
         key = name.casefold()
         if action == "加入":
             self.joins.setdefault(key, at)
@@ -76,13 +87,16 @@ class EasyBotMonitor:
         if binding is None or self.plugin.stopping:
             return
         _, qq = binding
-        for group in self.plugin.config.get("group_ids", ["1080530485"]):
+        platform = self.plugin.context.get_platform("aiocqhttp")
+        if platform is None:
+            return
+        for group in self.plugin.config.get("group_ids", []):
             group = str(group)
             marker = group + ":" + qq
             if at - self.sent.get(marker, 0) < 86400:
                 continue
             delivered = await self.plugin.context.send_message(
-                "驹泽乃依:GroupMessage:" + group,
+                platform.meta().id + ":GroupMessage:" + group,
                 MessageChain(chain=[At(qq=qq), Plain(text=" " + PACK_REMINDER)]),
             )
             if delivered is False:
@@ -95,26 +109,75 @@ class EasyBotMonitor:
             temporary.replace(self.state_path)
             now = time.monotonic()
             self.plugin.sessions[(group, qq)] = {
-                "at": now, "last_help_at": now, "image_followup_open": True,
+                "at": now,
+                "last_help_at": now,
+                "image_followup_open": True,
                 "facts": {"stage": "connection", "device": "", "tried": []},
                 "history": [{"role": "assistant", "content": PACK_REMINDER}],
             }
-            logger.info("Utopia quick-exit reminder delivered: group=%s duration=%.3fs", group, at - joined)
+            logger.info(
+                "Utopia quick-exit reminder delivered: group=%s duration=%.3fs",
+                group,
+                at - joined,
+            )
 
     async def run(self):
+        if self.root is None:
+            logger.info(
+                "Utopia EasyBot monitor disabled: no installation directory configured"
+            )
+            return
         path = self.root / "logs/latest.log"
+        opener = None
+        if os.name == "nt":
+            import ctypes
+            import msvcrt
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            create_file = kernel.CreateFileW
+            create_file.argtypes = [
+                wintypes.LPCWSTR,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.LPVOID,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.HANDLE,
+            ]
+            create_file.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+
+            def opener(filename, flags):
+                # Allow EasyBot to delete or rename its log during startup.
+                handle = create_file(filename, 0x80000000, 0x7, None, 3, 0x80, None)
+                if handle == wintypes.HANDLE(-1).value:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    return msvcrt.open_osfhandle(handle, flags)
+                except BaseException:
+                    kernel.CloseHandle(handle)
+                    raise
+
         stream = None
         try:
             while not self.plugin.stopping:
                 try:
                     if stream is None:
-                        stream = path.open(encoding="utf-8", errors="replace")
+                        stream = open(
+                            path, encoding="utf-8", errors="replace", opener=opener
+                        )
                         stream.seek(0, 2)
                         logger.info("Utopia EasyBot quick-exit monitor started")
                     stat = path.stat()
-                    if stat.st_size < stream.tell() or stat.st_ino != os.fstat(stream.fileno()).st_ino:
+                    if (
+                        stat.st_size < stream.tell()
+                        or stat.st_ino != os.fstat(stream.fileno()).st_ino
+                    ):
                         stream.close()
-                        stream = path.open(encoding="utf-8", errors="replace")
+                        stream = open(
+                            path, encoding="utf-8", errors="replace", opener=opener
+                        )
                     while True:
                         position = stream.tell()
                         line = stream.readline()
@@ -124,7 +187,10 @@ class EasyBotMonitor:
                         try:
                             await self.consume(line)
                         except Exception as error:
-                            logger.warning("Utopia quick-exit processing failed: error=%s", type(error).__name__)
+                            logger.warning(
+                                "Utopia quick-exit processing failed: error=%s",
+                                type(error).__name__,
+                            )
                 except OSError:
                     if stream:
                         stream.close()

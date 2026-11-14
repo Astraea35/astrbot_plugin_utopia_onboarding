@@ -22,6 +22,26 @@ ADDRESS_QUESTION = re.compile(
     r"^[一二三四五六123456](?:是|的)?(?:多少|哪个|在哪|呢)[?？。]*$|"
     r"^我只有[一二三四五六123456][。！!]*$"
 )
+OUTSIDE_ONBOARDING = re.compile(
+    r"(?:文件|模组|mod|插件|数据包).{0,24}(?:转换|转成|移植|适配|定制|开发)|"
+    r"(?:转换|转成|移植|适配|定制|开发).{0,24}(?:服务器版本|服务端|模组|mod|插件)|"
+    r"(?:光影|材质|资源包).{0,24}(?:月亮|太阳|天空|颜色|画面|好看|效果|显示|问题)|"
+    r"(?:月亮|太阳|天空).{0,16}(?:光影|材质)|"
+    r"地址卡|(?:画|制作|生成|设计).{0,12}(?:地址图|宣传图|海报)",
+    re.I,
+)
+ENTRY_FAILURE = re.compile(
+    r"进不去|进不来|连不上|无法连接|连接失败|未绑定|验证码.{0,8}过期|"
+    r"(?:游戏|客户端|启动器).{0,8}(?:闪退|崩溃|黑屏|启动不了|打不开)|"
+    r"(?:安装|下载|解压).{0,8}(?:失败|报错|错误|不了|损坏)|"
+    r"注册表.{0,12}(?:失败|不匹配)|(?:实体|注册项|条目).{0,12}(?:无法识别|缺失)",
+    re.I,
+)
+
+
+def is_outside_onboarding(text: str) -> bool:
+    """Exclude development and cosmetic chat while retaining explicit entry failures."""
+    return bool(OUTSIDE_ONBOARDING.search(text) and not ENTRY_FAILURE.search(text))
 
 
 def update_facts(previous: dict, messages: list[str]) -> dict:
@@ -45,7 +65,9 @@ def update_facts(previous: dict, messages: list[str]) -> dict:
             r"不是手机|非安卓", text
         ):
             facts["device"] = "安卓手机" if "苹果" not in text else "苹果设备"
-        if re.search(r"注册表|实体.*无法识别|unknown to this client|registry.?sync", text, re.I):
+        if re.search(
+            r"注册表|实体.*无法识别|unknown to this client|registry.?sync", text, re.I
+        ):
             facts["stage"] = "connection"
         elif re.search(r"官网|网站|网页", text):
             facts["stage"] = "website"
