@@ -15,6 +15,23 @@ dialog = importlib.import_module(package.__name__ + ".dialog_context")
 
 
 class ScopeTests(unittest.TestCase):
+    def test_documented_clipping_help_accepts_specific_learning_phrase(self):
+        text = "怎么解决攻击人物穿模的问题啊"
+        self.assertFalse(dialog.is_outside_onboarding(text))
+        result = intent.parse_answer_result(
+            json.dumps(
+                {
+                    "should_reply": True,
+                    "confidence": 0.99,
+                    "answer": "如果使用YSM，按官网教程关闭第一人称玩家动画。",
+                    "phrases": ["攻击人物穿模", "怎么解决"],
+                }
+            ),
+            text,
+        )
+        self.assertTrue(result["is_help"])
+        self.assertEqual(result["phrases"], ["攻击人物穿模"])
+
     def test_development_and_cosmetic_chat_stays_silent(self):
         for text in (
             "这些文件能不能转换成服务器版本的？",
