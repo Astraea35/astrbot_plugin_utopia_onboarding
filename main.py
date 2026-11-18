@@ -46,7 +46,8 @@ SYSTEM_PROMPT = SCOPE_PROMPT + """你是梦幻丨乌托邦探险之旅的新人�
 提问者已经在配置启用的官方QQ群，不要再要求他加入当前群；可以直接引导他打开群文件或发送自己的绑定验证码。只有明确询问群号或邀请别人入群时，才介绍加群方法。
 用简洁自然的中文回答，按对方当前卡住的步骤给出下一步；必要时只追问一个关键问题。
 安装或启动问题若未说明设备，先问电脑还是安卓手机，可先提供下载入口；不能把两种设备的操作混用，也不能在设备未确定时笼统要求“解压”或“不要解压”。
-服务器事实优先且严格以提供的 mhwtb.shop 官网原文为准。官网资料覆盖下载、版本、进群、进服、安卓、绑定、注册、登录和FAQ故障说明。同一事项以快速开始的详细教程优先于首页简短介绍。
+服务器事实优先且严格以提供的 mhwtb.shop 官网原文为准。官网资料覆盖下载、版本、进群、进服、安卓、绑定、注册、登录和FAQ操作与故障说明。同一事项以快速开始的详细教程优先于首页简短介绍。
+官网FAQ已收录的操作问题应直接按相关原文答复，不要转回设备、安装或登录排查。隐藏盔甲与玻璃套的问题，按官网讲清时装盔甲栏和原装备的区别；配方、材料数量和烧炼方法只采用检索到的官网原文，不凭普通盔甲常识补全。
 战利品箱、Lootr或“战利品表为空/无法生成”按官网FAQ解释报错与反馈步骤；已有对应说明时直接答复，不追问设备、安装或登录阶段，不声称已经修复箱子或恢复战利品。可能原因保留不确定措辞，具体处理交管理组核查。
 不要用模型常识、历史群聊或其他服务器的做法覆盖官网。职责内的求助若资料没写，明确说明并只追问相关报错；只有确需管理权限核查的事项才转管理组。职责外保持静默，不自行制定“禁止改文件/整合包/服务端”等规则；不要猜测Java版本、白名单流程、线路在线情况或玩家是否已绑定。
 群文件夹、文件名、备份教程、备用域名只能使用官网原文实际记载的名称。官网打不开时可以建议换浏览器或网络、索取浏览器错误；不得虚构“官网教程/下载”备份文件夹或备用教程。
@@ -70,7 +71,7 @@ context.facts是当前玩家已明确说明的设备、步骤和失败尝试。�
 "官网怎么进不去"已经明确是网页访问问题，只问浏览器的错误或提供官网已记载的群文件入口，不要再问是网页还是游戏，不要转成服务器安装教程。
 "服务器"后接"卡吗？"属于简短的线路／状态询问，只报告可核实的状态或说明未知，不追问新手安装步骤；管理员询问状态也不代表他不会安装。
 context.visual_question=true表示玩家先发图后说"这个是怎么农"等省略问题。必须直接查看所附图片确认与本人求助有关，image_is_help=true才回复；头像、表情包、看不清的图不借机追问安装。明确文字求助无需再经过纯文本猜图。
-在有近期上下文时，理解“这个文件需要哪个版本”“不对呀，版本对呀”“链接协商中”“我也是”等省略表达。纯闲聊、转述、管理讨论、抱怨别人、游戏玩法、等待通知和已经解决的描述不回复。
+在有近期上下文时，理解“这个文件需要哪个版本”“不对呀，版本对呀”“链接协商中”“我也是”等省略表达。纯闲聊、转述、管理讨论、抱怨别人、官网FAQ未收录的游戏玩法、等待通知和已经解决的描述不回复。official_faq_topics中已收录的操作与合成求助属于职责内，不因玩家已进入游戏而排除；仍须确认当前玩家正在提问，并依据相关官网原文答复。
 官网FAQ已收录的战利品箱异常属于故障求助，不属于游戏玩法。当前玩家询问Lootr、“战利品表为空/无法生成”或ati_structures表名报错，或直接贴出本人遇到的完整箱子报错，应依据官网答复；开箱收获、寻宝/刷箱攻略、帮别人的处理建议和维护者排查说明仍不回复。
 官网FAQ已收录YSM人物模型穿模故障。“怎么解决攻击人物穿模的问题啊”“攻击任务穿模怎么办”（人物的错字）、“第一人称挥手穿模怎么办”是本人故障求助，应依据检索到的穿模教程回答。未明确使用YSM时，答复必须先写“如果你使用的是YSM模型”，不能断言原因就是YSM；不要求重装或重新绑定。模型展示、皮肤评价、战斗攻略和给别人建议仍不回复。
 context.active_help=true时，“链接协商中”“连接协商中”“不对呀，版本对呀”等描述当前卡住步骤的进度短句是继续求助，即使没有问号，也应给下一步；不能仅因没有问句而忽略。
@@ -86,7 +87,7 @@ phrases最多3个，逐字取自当前text，每个4到32字且有进服领域�
 """
 
 TOPIC = re.compile(
-    r"进服|入服|服务器|整合包|客户端|启动器|安装|下载|解压|网页|网站|pcl|fcl|java|模组|mod|fabric|forge|基岩|正版|离线|安卓|手机|苹果|绑定|验证码|注册|登录|密码|白名单|群文件|游戏|群号|加群|入群|官网|内存|光影|战利品表|战利品箱|lootr|ati_structures|穿模|ysm|better.?combat",
+    r"进服|入服|服务器|整合包|客户端|启动器|安装|下载|解压|网页|网站|pcl|fcl|java|模组|mod|fabric|forge|基岩|正版|离线|安卓|手机|苹果|绑定|验证码|注册|登录|密码|白名单|群文件|游戏|群号|加群|入群|官网|内存|光影|战利品表|战利品箱|lootr|ati_structures|穿模|ysm|better.?combat|盔甲|铠甲|玻璃套|玻璃甲|玻璃锭|时装栏",
     re.I,
 )
 QUESTION = re.compile(
@@ -191,6 +192,14 @@ class UtopiaOnboarding(Star):
         self.config = config
         self.data_dir = StarTools.get_data_dir("astrbot_plugin_utopia_onboarding")
         self.manifest_path = self.data_dir / "website_manifest.json"
+        self.faq_topics = []
+        if self.manifest_path.exists():
+            try:
+                self.faq_topics = json.loads(
+                    self.manifest_path.read_text(encoding="utf-8")
+                ).get("faq_topics", [])
+            except (OSError, ValueError, AttributeError):
+                logger.exception("Utopia saved FAQ topics could not be loaded")
         self.keywords_path = self.data_dir / "learned_keywords.json"
         self.learned_keywords = {}
         if self.keywords_path.exists():
@@ -246,6 +255,13 @@ class UtopiaOnboarding(Star):
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temporary.replace(self.manifest_path)
+
+    def _faq_scope_prompt(self) -> str:
+        return (
+            "\n<official_faq_topics>\n"
+            + json.dumps(self.faq_topics, ensure_ascii=False)
+            + "\n</official_faq_topics>"
+        )
 
     async def _sync_loop(self) -> None:
         while True:
@@ -325,8 +341,16 @@ class UtopiaOnboarding(Star):
                 self._save_manifest(manifest)
             if filename not in documents:
                 del owned[filename]
+        manifest["faq_topics"] = [
+            {"title": document["title"], "questions": document["questions"]}
+            for filename, document in documents.items()
+            if filename.startswith("官网_guide-faq_")
+        ]
         manifest["last_success_at"] = time.time()
         self._save_manifest(manifest)
+        if self.faq_topics != manifest["faq_topics"]:
+            self.faq_topics = manifest["faq_topics"]
+            self.intent_cache.clear()
         logger.info(
             "Utopia official knowledge synchronized: sections=%d changed=%d",
             len(documents),
@@ -360,7 +384,7 @@ class UtopiaOnboarding(Star):
                                 messages=[item["text"] for item in batch],
                                 require_complete=True,
                             ),
-                            system_prompt=INTENT_PROMPT,
+                            system_prompt=INTENT_PROMPT + self._faq_scope_prompt(),
                             prompt=json.dumps(
                                 {
                                     "messages": [
@@ -1085,6 +1109,7 @@ class UtopiaOnboarding(Star):
                     request_system = (
                         SYSTEM_PROMPT
                         + DECISION_PROMPT
+                        + self._faq_scope_prompt()
                         + "\n<official_website_knowledge>\n"
                         + evidence[:9000]
                         + "\n</official_website_knowledge>"

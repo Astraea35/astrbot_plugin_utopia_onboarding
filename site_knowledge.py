@@ -75,6 +75,10 @@ def build_documents(pages: dict[str, str]) -> dict[str, dict]:
             documents[name] = {
                 "source_url": url,
                 "title": title,
+                "questions": [
+                    item.get_text(" ", strip=True)
+                    for item in section.find_all("h3")
+                ],
                 "chunks": chunks,
                 "sha256": hashlib.sha256("\n".join(chunks).encode("utf-8")).hexdigest(),
             }

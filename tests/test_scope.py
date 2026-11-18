@@ -15,6 +15,20 @@ dialog = importlib.import_module(package.__name__ + ".dialog_context")
 
 
 class ScopeTests(unittest.TestCase):
+    def test_glass_armor_learning_still_requires_current_specific_phrase(self):
+        result = intent.parse_answer_result(
+            json.dumps(
+                {
+                    "should_reply": True,
+                    "confidence": 0.99,
+                    "answer": "请按官网合成并放入时装盔甲栏。",
+                    "phrases": ["隐藏盔甲", "玻璃套怎么合成", "玻璃锭123456", "怎么"],
+                }
+            ),
+            "怎么隐藏盔甲，玻璃套怎么合成？",
+        )
+        self.assertEqual(result["phrases"], ["隐藏盔甲", "玻璃套怎么合成"])
+
     def test_documented_clipping_help_accepts_specific_learning_phrase(self):
         text = "怎么解决攻击人物穿模的问题啊"
         self.assertFalse(dialog.is_outside_onboarding(text))
