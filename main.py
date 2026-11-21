@@ -18,9 +18,11 @@ from astrbot.api.star import Context, Star, StarTools
 from .dialog_context import (
     ADDRESS_QUESTION,
     HELPER_ADVICE,
+    MAID_MOD_GUIDE,
     RESUME_HELP,
     VAGUE_IMAGE_QUESTION,
     is_outside_onboarding,
+    reports_missing_maid,
     stage_fallback,
     update_facts,
 )
@@ -38,6 +40,7 @@ from .site_knowledge import BASE_URL, KB_NAME, SOURCE_PAGES, build_documents
 INTENT_BATCH_DELAY = 3
 CONNECTION_SETTLE_DELAY = 1.5
 IMAGE_FOLLOWUP_SECONDS = 120
+QUICK_EXIT_IMAGE_FOLLOWUP_SECONDS = 300
 MESSAGE_SETTLE_DELAY = 0.8
 PAUSE_SECONDS = 300
 ACCOUNT_REPLY = "这涉及账号身份与旧数据，需要管理组核查。请整理旧游戏ID、新游戏ID、原来和现在的登录方式（正版或离线）及发生时间交给管理组。先别反复改名或重新注册，暂时不能判断旧存档、背包或领地是否已迁移。密码不要发群里。官网登录说明：https://mhwtb.shop/guide-start.html"
@@ -62,6 +65,7 @@ SYSTEM_PROMPT = SCOPE_PROMPT + """你是梦幻丨乌托邦探险之旅的新人�
 
 DECISION_PROMPT = """
 玩家刚绑定后正在排查进服失败时，“mod里有这个”“84个实体无法识别”“有什么扩展吗”是同一人的连续故障描述，必须结合他之前的截图回答。注册表同步失败、unknown to this client、无法识别实体说明已到连接校验阶段，不要退回启动器安装教程；截图显示的模组名与错误是证据，不能断言某个模组配置就是原因。已用群文件整合包仍缺项时也可能是包本身有问题，应保留截图交管理组核查。
+本人进服排查中说“没装车万女仆”属于继续求助，无需问号。本人截图在缺少或不匹配的模组中点名 touhou_little_maid 时，应先说明它是车万女仆，区分截图提示的是缺失还是版本不匹配；仅出现名称不能证明缺装。随后必须给出下方服方提供的具体补装步骤，保留从群文件取本服 Fabric 版、放入当前乌托邦实例的 mods、重启游戏，以及仍报错时的处理。若是版本不匹配，提醒用本服版本替换不匹配的同一模组，避免保留两份。不要只说“核对整合包”，也不要把女仆持盾闪退的 Mine Cells 修补当成本题的补装步骤。帮别人说“装车万女仆”或聊天提到车万女仆不回复。
 本轮同时判断是否值得回复并生成答案，只输出JSON：
 {"should_reply":true,"confidence":0.99,"image_is_help":false,"answer":"简短答案与官网链接","phrases":["原话中的具体进服表达"]}
 只有当前玩家正在请求服务器帮助且置信度至少0.9时才回复；本地关键词命中只说明是候选，不能代替判断。非求助返回should_reply=false、answer=""、phrases=[]。
@@ -179,7 +183,7 @@ def is_help_question(text: str, active: bool = False, has_image: bool = False) -
         return False
     if is_resolved(text) or is_outside_onboarding(text):
         return False
-    if ISSUE.search(text) or NEW_PLAYER.search(text):
+    if ISSUE.search(text) or NEW_PLAYER.search(text) or reports_missing_maid(text, active):
         return True
     if TOPIC.search(text) and QUESTION.search(text):
         return True
@@ -876,6 +880,14 @@ class UtopiaOnboarding(Star):
             or bool(own and TOPIC.search("\n".join(item["text"] for item in own[-4:])))
         )
         normalized = normalize_text(safe_text)
+        missing_maid = reports_missing_maid(safe_text, conversation["active_help"])
+        if missing_maid:
+            conversation["facts"]["stage"] = "connection"
+        image_window = (
+            QUICK_EXIT_IMAGE_FOLLOWUP_SECONDS
+            if previous and previous.get("quick_exit")
+            else IMAGE_FOLLOWUP_SECONDS
+        )
         if previous and safe_text and not is_help_question(safe_text, active=True):
             # Keep text history, but unrelated chatter must not keep picture followups open.
             previous["image_followup_open"] = False
@@ -885,7 +897,7 @@ class UtopiaOnboarding(Star):
             and not (
                 previous
                 and now - previous.get("last_help_at", previous["at"])
-                <= IMAGE_FOLLOWUP_SECONDS
+                <= image_window
                 and previous.get("image_followup_open", True)
             )
         ):
@@ -898,7 +910,7 @@ class UtopiaOnboarding(Star):
             return
         direct_help = is_help_question(
             safe_text, active=active, has_image=bool(images)
-        ) or any(phrase in normalized for phrase in self.learned_keywords)
+        ) or missing_maid or any(phrase in normalized for phrase in self.learned_keywords)
         direct_help = direct_help or bool(connection and conversation["active_help"])
         direct_help = direct_help or bool(active and ADDRESS_QUESTION.search(safe_text))
         if (
@@ -1109,6 +1121,8 @@ class UtopiaOnboarding(Star):
                     request_system = (
                         SYSTEM_PROMPT
                         + DECISION_PROMPT
+                        + "\n服方补装指引，仅在本人确实缺少车万女仆或截图显示该模组不匹配时使用：\n"
+                        + MAID_MOD_GUIDE
                         + self._faq_scope_prompt()
                         + "\n<official_website_knowledge>\n"
                         + evidence[:9000]
@@ -1181,7 +1195,7 @@ class UtopiaOnboarding(Star):
                         )
                     ):
                         return
-                    if not result["is_help"]:
+                    if not result["is_help"] and not missing_maid:
                         if previous:
                             previous["image_followup_open"] = False
                         logger.info(
@@ -1192,7 +1206,7 @@ class UtopiaOnboarding(Star):
                             "unrelated_image" if image_only else "not_current_help",
                         )
                         return
-                    answer = result["answer"]
+                    answer = MAID_MOD_GUIDE if missing_maid else result["answer"]
                     if account_data:
                         answer = ACCOUNT_REPLY
                     if (
@@ -1289,13 +1303,15 @@ class UtopiaOnboarding(Star):
                     }
                 )
             )
-            if not safe_help or visual_question:
+            if not (missing_maid or safe_help) or visual_question:
                 logger.info(
                     "Utopia onboarding skipped: group=%s sender=%s message_id=%s reason=unconfirmed_help_after_failure",
                     group, sender, message_id,
                 )
                 return
-            if account_data:
+            if missing_maid:
+                answer = MAID_MOD_GUIDE
+            elif account_data:
                 answer = ACCOUNT_REPLY
             elif isinstance(error, ImageProviderUnavailable):
                 answer = "当前可用模型无法读取这张截图，请把完整报错文字发出来，并说明是电脑还是安卓手机。官网教程：https://mhwtb.shop/guide-start.html"

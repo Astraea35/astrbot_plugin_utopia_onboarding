@@ -15,6 +15,15 @@ dialog = importlib.import_module(package.__name__ + ".dialog_context")
 
 
 class ScopeTests(unittest.TestCase):
+    def test_missing_maid_report_needs_help_context_or_explicit_self_report(self):
+        self.assertFalse(dialog.reports_missing_maid("没装车万女仆", active=False))
+        self.assertTrue(dialog.reports_missing_maid("没装车万女仆", active=True))
+        self.assertTrue(dialog.reports_missing_maid("客户端提示缺少 touhou_little_maid", active=False))
+        self.assertTrue(dialog.reports_missing_maid("Missing required mod: touhou_little_maid", active=False))
+        for text in ("装车万女仆", "他说没装车万女仆", "你没装车万女仆", "没装车万女仆也能进"):
+            with self.subTest(text=text):
+                self.assertFalse(dialog.reports_missing_maid(text, active=True))
+
     def test_glass_armor_learning_still_requires_current_specific_phrase(self):
         result = intent.parse_answer_result(
             json.dumps(

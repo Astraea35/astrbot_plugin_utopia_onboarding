@@ -112,6 +112,7 @@ class EasyBotMonitor:
                 "at": now,
                 "last_help_at": now,
                 "image_followup_open": True,
+                "quick_exit": True,
                 "facts": {"stage": "connection", "device": "", "tried": []},
                 "history": [{"role": "assistant", "content": PACK_REMINDER}],
             }

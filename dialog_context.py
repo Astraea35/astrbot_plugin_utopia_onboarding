@@ -38,6 +38,29 @@ ENTRY_FAILURE = re.compile(
     re.I,
 )
 
+MAID_MOD = r"(?:车[万萬]女仆|touhou_little_maid|touhou little maid(?:: orihime)?)"
+MAID_MISSING = re.compile(
+    rf"(?:(?:(?P<self>我(?:这边|的客户端)?(?:确实|才发现)?)[，, ]*"
+    rf"|(?P<error>(?:游戏|客户端|报错)?提示)[：: ]*)?"
+    rf"(?:没(?:有)?装|缺(?:少|失)?|找不到)[：: ]*(?:模组[：: ]*)?{MAID_MOD}"
+    rf"|(?P<english>missing(?: required)? mod[：: ]+{MAID_MOD}|mod[：: ]+{MAID_MOD} is missing))"
+    r"(?:[ ]*(?:模组|mod))?(?:了|啊|呀)?[。！! ]*",
+    re.I,
+)
+MAID_MOD_GUIDE = (
+    "如果你已经装好了本服整合包，只缺车万女仆，先退出游戏，从群文件取本服提供的 Fabric 版车万女仆"
+    "（touhou_little_maid），把 .jar 放进启动器当前选中的乌托邦实例的 mods 文件夹，然后重新启动游戏。"
+    "找不到对应文件或还缺其他模组时，从群文件的「安装」文件夹下载当前完整整合包。"
+    "如果已按这两种方式之一更新，仍提示缺失或不匹配，请把完整报错截图交给管理组核对版本。"
+    "教程：https://mhwtb.shop/guide-start.html#download-qq"
+)
+
+
+def reports_missing_maid(text: str, active: bool) -> bool:
+    """Allow a terse missing-mod update in the same player's help conversation."""
+    match = MAID_MISSING.fullmatch(text.strip())
+    return bool(match and (active or match["self"] or match["error"] or match["english"]))
+
 
 def is_outside_onboarding(text: str) -> bool:
     """Exclude development and cosmetic chat while retaining explicit entry failures."""
